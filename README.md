@@ -10,4 +10,4 @@ Gmail: camilo.velez4@udea.edu.co
 
 
 - Link repositorio: https://github.com/VeleZ-z/LAB_2_ACYL_AssemblyMIPS.git
-- Link video:
+- Link video: https://drive.google.com/file/d/1-bURjUPYYMZp5Bw8WMhZ1S-maXGFpmdw/view?usp=sharing

@@ -1,102 +1,101 @@
 
 .data
-num_buf: .space 12
-output_file: .asciiz "lista_ordenada.txt"
-comma: .asciiz ","
-input_file:   .asciiz "lista.txt"
-buffer:       .space 1024
-array:        .space 400
-err_open:     .asciiz "Error al abrir archivo\n"
-msg_out:      .asciiz "Contenido del archivo:\n"
-msg_count:    .asciiz "Total numeros: "
-newline:      .asciiz "\n"
+msg_sorted: .asciiz "Lista ordenada:\n"
+.align 2    # Alinea los datos 2^n, en este caso 2^2
+input_file:     .asciiz "lista.txt"	# Nombre del archivo de entrada
+output_file:    .asciiz "lista_ordenada.txt"	# Nombre del archivo de salida
+buffer:         .space 1024	# Nombre del archivo de salida
+.align 2
+array: .space 400	# Espacio para almacenar los números enteros
+msg_out:        .asciiz "Contenido del archivo:\n"
+comma:          .asciiz ","	# Separador de números
+newline:        .asciiz "\n"	# Nueva línea
+num_buf: .space 16	# Buffer para convertir números a string
+err_open:       .asciiz "Error al abrir archivo.\n"	# Mensaje de error 
 
 .text
 .globl main
 
 main:
-    # Abrir archivo en modo lectura (flags = 0)
+    # Abrir archivo de lectura
     li $v0, 13
     la $a0, input_file
-    li $a1, 0
+    li $a1, 0	# Modo lectura
     syscall
-    bltz $v0, error_open
-    move $s0, $v0
+    slt $t9, $v0, $zero   # $t9 = 1 si $v0 < 0
+    bne $t9, $zero, open_error	# Si salta al error
+    addi $s0, $v0, 0
 
     # Leer contenido del archivo
     li $v0, 14
-    move $a0, $s0
+    addi $a0, $s0, 0
     la $a1, buffer
     li $a2, 1024
     syscall
 
-    # Mostrar mensaje
+    # Imprimir mensaje de contenido
     li $v0, 4
     la $a0, msg_out
     syscall
-
-    # Mostrar contenido leÃ­do
     li $v0, 4
     la $a0, buffer
     syscall
-
-    # Cerrar archivo
-    li $v0, 16
-    move $a0, $s0
+    li $v0, 4
+    la $a0, msg_sorted
     syscall
 
-    # Parsear nÃºmeros
+    # Parsear numeros
     jal parse_numbers
+    addi $s1, $t2, 0	# guardar cantidad
+    la $s2, array	# Dirección base
 
-    # Guardar array base y cantidad en registros estables
-    la $s0, array
-    andi $s0, $s0, 0xFFFFFFFC  # asegurar alineaciÃ³n
-    move $s1, $t2
-
-    # Ordenar con combsort
+    # Ordenar
     jal combsort
 
-    # Mostrar cantidad de nÃºmeros
+    # Mostrar lista ordenada
     li $v0, 4
-    la $a0, msg_count
     syscall
-    move $a0, $s1
-    li $v0, 1
-    syscall
-    li $v0, 4
-    la $a0, newline
-    syscall
-
     jal print_sorted
-jal save_to_file
-li $v0, 10
+
+    # Guardar en archivo
+    jal save_to_file
+
+    li $v0, 10
     syscall
 
-error_open:
+
+# Error si no se puede abrir
+open_error:
     li $v0, 4
     la $a0, err_open
     syscall
-    jal print_sorted
-jal save_to_file
-li $v0, 10
+    li $v0, 10
     syscall
 
+# Función: parse_numbers
+# Convierte el buffer leído a números
 parse_numbers:
     la $t0, buffer
     la $t1, array
-    andi $t1, $t1, 0xFFFFFFFC  # forzar alineaciÃ³n
-    andi $t1, $t1, 0xFFFFFFFC  # asegurar alineaciÃ³n
+    andi $t1, $t1, 0xFFFFFFFC
     li $t2, 0
 
 parse_loop:
     lb $t3, 0($t0)
-    beqz $t3, end_parse
+    li $t8, 0
+    beq $t3, $t8, end_parse
     li $t4, 0
 
 parse_digit:
-    blt $t3, 48, end_digit
-    bgt $t3, 57, end_digit
-    mul $t4, $t4, 10
+    li $at, 48         # Cargar el valor 48 en un registro temporal ($at)
+    slt $at, $t3, $at  # $at = ($t3 < 48) ? 1 : 0
+    bne $at, $zero, end_digit
+    li $at, 57
+    slt $at, $at, $t3
+    bne $at, $zero, end_digit
+    addi $t5, $zero, 10
+    mult $t4, $t5
+    mflo $t4
     addi $t3, $t3, -48
     add $t4, $t4, $t3
     addi $t0, $t0, 1
@@ -107,187 +106,160 @@ end_digit:
     sw $t4, 0($t1)
     addi $t1, $t1, 4
     addi $t2, $t2, 1
-    beqz $t3, end_parse
+    li $t8, 0
+    beq $t3, $t8, end_parse
     addi $t0, $t0, 1
     j parse_loop
 
 end_parse:
     jr $ra
 
+# Función: combsort
+# Ordena el arreglo usando CombSort
 combsort:
-    move $t0, $s1     # t0 = n
-    li $t1, 1         # swapped = 1
-    li $t2, 0         # gap
+    li $t0, 1
+    addi $t1, $s1, 0
+    li $t2, 0       
 
 comb_loop:
     li $t3, 10
-    mul $t0, $t0, $t3
+    mult $t1, $t3
+    mflo $t1
     li $t4, 13
-    div $t0, $t4
-    mflo $t0
-    ble $t0, 1, set_gap
+    div $t1, $t4
+    mflo $t1
+    li $t9, 2
+    slt $t9, $t1, $t9
+    bne $t9, $zero, set_gap
     j do_pass
 
 set_gap:
-    li $t0, 1
+    li $t1, 1
 
 do_pass:
-    li $t1, 0     # swapped = 0
-    li $t5, 0     # i = 0
+    li $t0, 0
+    li $t5, 0
 
 pass_loop:
-    add $t6, $t5, $t0
-    bge $t6, $s1, comb_check
-
+    add $t6, $t5, $t1
+    slt $t8, $t6, $s1   # $t8 = 1 si $t6 < $s1
+    beq $t8, $zero, comb_check
     sll $t7, $t5, 2
-    add $t8, $s0, $t7
+    add $t8, $s2, $t7
     lw $t9, 0($t8)
-
     sll $t7, $t6, 2
-    add $t8, $s0, $t7
+    add $t8, $s2, $t7
     lw $t4, 0($t8)
+    slt $t8, $t4, $t9
+    beq $t8, $zero, skip_swap
 
-    ble $t9, $t4, skip_swap
-
-    # swap
     sll $t7, $t5, 2
-    add $t8, $s0, $t7
+    add $t8, $s2, $t7
     sw $t4, 0($t8)
-
     sll $t7, $t6, 2
-    add $t8, $s0, $t7
+    add $t8, $s2, $t7
     sw $t9, 0($t8)
-
-    li $t1, 1
+    li $t0, 1
 
 skip_swap:
     addi $t5, $t5, 1
     j pass_loop
 
 comb_check:
-    bgt $t0, 1, comb_loop
-    beq $t1, 1, comb_loop
+    li $at, 1
+    slt $at, $at, $t1
+    bne $at, $zero, comb_loop
+    beq $t0, 1, comb_loop
     jr $ra
 
-
-#############################
-# Mostrar arreglo ordenado
-#############################
+# Función: print_sorted
+# Imprime los números ordenados
 print_sorted:
-    li $t0, 0          # Ã­ndice
-    la $t1, array
-    andi $t1, $t1, 0xFFFFFFFC  # forzar alineaciÃ³n
-    move $t2, $t2      # cantidad ya estÃ¡ en $t2
-
+    li $t0, 0
 print_loop:
-    bge $t0, $s1, end_print
-
-    sll $t3, $t0, 2
-    add $t4, $t1, $t3
-    lw $a0, 0($t4)
-
-    li $v0, 1          # imprimir nÃºmero
+    slt $t8, $t0, $s1
+    beq $t8, $zero, end_print
+    sll $t1, $t0, 2
+    add $t2, $s2, $t1
+    lw $a0, 0($t2)
+    li $v0, 1
     syscall
-
-    li $v0, 4          # salto de lÃ­nea
+    li $v0, 4
     la $a0, newline
     syscall
-
     addi $t0, $t0, 1
     j print_loop
-
 end_print:
     jr $ra
 
-#############################
-# Guardar en archivo ordenado.txt
-#############################
-
+# Función: save_to_file
+# Guarda la lista ordenada en archivo
 save_to_file:
-    # Abrir archivo para escritura (flags = 1)
     li $v0, 13
     la $a0, output_file
     li $a1, 1
     syscall
-    bltz $v0, error_open
-    move $s3, $v0   # fd escritura
+    slt $t9, $v0, $zero
+    bne $t9, $zero, save_end
+    addi $s3, $v0, 0
 
     li $t0, 0
-    la $t1, array
-    andi $t1, $t1, 0xFFFFFFFC  # forzar alineaciÃ³n
-
-
 save_loop:
-    # convertir nÃºmero a string (decimal)
-    sll $t2, $t0, 2
-    add $t3, $t1, $t2
-    lw $t4, 0($t3)
+    slt $t8, $t0, $s1
+    beq $t8, $zero, close_file
+    sll $t1, $t0, 2
+    add $t2, $s2, $t1
+    lw $t3, 0($t2)
 
-    # preparar para conversiÃ³n manual a string decimal
-    li $t5, 10
-    li $t6, 0
-    la $t7, num_buf + 10     # puntero al final del buffer
-    li $t8, 0                # contador de dÃ­gitos
+    li $t4, 10
+    li $t5, 0
+    la $t6, num_buf
+    addi $t6, $t6, 11
+    li $t7, 0
 
 conv_loop:
-    beqz $t4, conv_done
-    divu $t4, $t5
-    mfhi $t9
-    addi $t9, $t9, 48
-    subi $t7, $t7, 1
-    sb $t9, 0($t7)
-    mflo $t4
-    addi $t8, $t8, 1
+    li $t8, 0
+    beq $t3, $t8, conv_done
+    divu $t3, $t4
+    mfhi $t8
+    addi $t8, $t8, 48
+    addi $t6, $t6, -1
+    sb $t8, 0($t6)
+    mflo $t3
+    addi $t7, $t7, 1
     j conv_loop
 
 conv_done:
-    beq $t8, 0, store_zero
+    beq $t7, 0, store_zero
     j write_number
 
 store_zero:
-    subi $t7, $t7, 1
-    li $t9, 48
-    sb $t9, 0($t7)
-    li $t8, 1
+    addi $t6, $t6, -1
+    li $t8, 48
+    sb $t8, 0($t6)
+    li $t7, 1
 
 write_number:
     li $v0, 15
-    move $a0, $s3
-    move $a1, $t7
-    move $a2, $t8
+    addi $a0, $s3, 0
+    addi $a1, $t6, 0
+    addi $a2, $t7, 0
     syscall
 
-    # Escribir coma si no es el Ãºltimo
     addi $t0, $t0, 1
-    bge $t0, $s1, close_file
+    slt $t8, $t0, $s1
+    beq $t8, $zero, close_file
     li $v0, 15
-    move $a0, $s3
+    addi $a0, $s3, 0
     la $a1, comma
     li $a2, 1
     syscall
-
-    j save_loop
-    bge $t0, $s1, close_file
-
-    sll $t2, $t0, 2
-    add $t3, $t1, $t2
-    lw $t4, 0($t3)
-
-    # Convertir entero a string manualmente (muy simple)
-    li $v0, 1
-    move $a0, $t4
-    syscall
-
-    # Imprimir separador
-    li $v0, 4
-    la $a0, comma
-    syscall
-
-    addi $t0, $t0, 1
     j save_loop
 
 close_file:
     li $v0, 16
-    move $a0, $s3
+    addi $a0, $s3, 0
     syscall
+    
+save_end:
     jr $ra
